@@ -29,61 +29,78 @@ function formatTime(seconds) {
 // ─── Today tab ───────────────────────────────────────────────────────────────
 
 async function loadToday() {
-  const data = await chrome.storage.local.get(["siteTimes", "timerState"]);
-  const siteTimes = data.siteTimes || {};
-  const sessionsToday = data.timerState?.sessionsToday || 0;
-
-  // Total screen time
+  const { 
+    siteTimes = {}, 
+    siteWeeklyTotals = {}, 
+    timerState = {},
+    weeklyTotals = {},
+    pomodoroHistory = {}
+  } = await chrome.storage.local.get(["siteTimes", "siteWeeklyTotals", "timerState", "weeklyTotals", "pomodoroHistory"]);
+  
+  const sessionsToday = timerState?.sessionsToday || 0;
   const totalSeconds = Object.values(siteTimes).reduce((a, b) => a + b, 0);
+  
   document.getElementById("total-time").textContent = formatTime(totalSeconds);
   document.getElementById("pomodoros-done").textContent = sessionsToday;
 
-  // Sort sites by time descending, take top 6
-  const sorted = Object.entries(siteTimes)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6);
+  // -- Add Click Listeners for Stats --
+  const totalStat = document.getElementById("stat-total-time");
+  totalStat.onclick = () => toggleStatPanel("panel-total-time", renderTotalWeeklyChart(weeklyTotals, totalSeconds));
+
+  const pomoStat = document.getElementById("stat-pomodoros");
+  pomoStat.onclick = () => toggleStatPanel("panel-pomodoros", renderPomodoroDistribution(pomodoroHistory));
+
+  // -- Render Website List --
+  const sortedPairs = Object.entries(siteTimes).sort((a, b) => b[1] - a[1]);
+  const topSites = sortedPairs.slice(0, 5);
+  const others = sortedPairs.slice(5);
 
   const list = document.getElementById("site-list");
   list.innerHTML = "";
 
-  if (sorted.length === 0) {
-    list.innerHTML = `<p style="padding:16px;color:#aaa;font-size:13px;">
-      No data yet — browse a little and reopen the popup.
-    </p>`;
+  if (topSites.length === 0) {
+    list.innerHTML = `<p style="padding:16px;color:#aaa;font-size:13px;">No data yet — browse a little and reopen the popup.</p>`;
     return;
   }
 
-  const maxTime = sorted[0][1]; // the longest time, used to scale the bars
+  const maxTime = topSites[0][1];
 
-  sorted.forEach(([host, seconds]) => {
+  topSites.forEach(([host, seconds]) => {
     const barWidth = Math.round((seconds / maxTime) * 100);
-
+    const container = document.createElement("div");
+    container.className = "site-item-container";
+    
+    // Create elements explicitly for better click handling
     const row = document.createElement("div");
     row.className = "site-row";
     row.innerHTML = `
-      <img class="favicon"
-        src="https://www.google.com/s2/favicons?domain=${host}&sz=32"
-        onerror="this.style.visibility='hidden'"
-      />
+      <img class="favicon" src="https://www.google.com/s2/favicons?domain=${host}&sz=32" />
       <div class="site-info">
         <div class="site-name">${host}</div>
-        <div class="site-bar-wrap">
-          <div class="site-bar-fill" style="width: ${barWidth}%"></div>
-        </div>
+        <div class="site-bar-wrap"><div class="site-bar-fill" style="width: ${barWidth}%"></div></div>
       </div>
       <div class="site-time">${formatTime(seconds)}</div>
     `;
-    list.appendChild(row);
+    row.addEventListener("click", () => toggleSiteDetail(host));
+
+    const detail = document.createElement("div");
+    detail.className = "site-details";
+    detail.id = `detail-${host.replace(/\./g, '-')}`;
+    detail.innerHTML = `
+      <div style="font-size: 10px; font-weight: 600; color: #7F77DD; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em">7-Day Trend</div>
+      ${renderMiniChart(host, siteWeeklyTotals[host], seconds)}
+    `;
+
+    container.appendChild(row);
+    container.appendChild(detail);
+    list.appendChild(container);
   });
 
-  // Calculate "Others" category for sites not in top 6
-  const individualSum = sorted.reduce((a, b) => a + b[1], 0);
-  const otherSeconds = totalSeconds - individualSum;
-
-  if (otherSeconds > 1) {
-    const row = document.createElement("div");
-    row.className = "site-row other-sites";
-    row.innerHTML = `
+  if (others.length > 0) {
+    const otherSeconds = others.reduce((a, b) => a + b[1], 0);
+    const otherRow = document.createElement("div");
+    otherRow.className = "site-row other-sites";
+    otherRow.innerHTML = `
       <div class="favicon" style="display:flex;align-items:center;justify-content:center;background:#eee;color:#888;font-size:10px;font-weight:700">?</div>
       <div class="site-info">
         <div class="site-name">Other sites</div>
@@ -93,8 +110,149 @@ async function loadToday() {
       </div>
       <div class="site-time">${formatTime(otherSeconds)}</div>
     `;
-    list.appendChild(row);
+    otherRow.addEventListener("click", toggleOtherExpansion);
+    list.appendChild(otherRow);
+
+    const expansion = document.createElement("div");
+    expansion.className = "other-expansion";
+    expansion.id = "other-expansion-list";
+    others.slice(0, 10).forEach(([host, seconds]) => {
+       const subRow = document.createElement("div");
+       subRow.className = "sub-site-row";
+       subRow.innerHTML = `
+         <img class="sub-favicon" src="https://www.google.com/s2/favicons?domain=${host}&sz=32" />
+         <div class="site-name" style="flex:1">${host}</div>
+         <div class="site-time">${formatTime(seconds)}</div>
+       `;
+       expansion.appendChild(subRow);
+    });
+    list.appendChild(expansion);
   }
+}
+
+// -- Charts & Detailed Views --
+
+function renderTotalWeeklyChart(weeklyTotals = {}, todaySeconds) {
+  const days = [];
+  const now = new Date();
+  let max = todaySeconds;
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().slice(0, 10);
+    const secs = i === 0 ? todaySeconds : (weeklyTotals[dateStr] || 0);
+    if (secs > max) max = secs;
+    days.push(secs);
+  }
+
+  const bars = days.map(s => {
+    const h = max > 0 ? (s / max) * 100 : 0;
+    return `<div class="mini-bar" title="${formatTime(s)}"><div class="mini-bar-fill" style="height:${h}%"></div></div>`;
+  }).join("");
+
+  return `
+    <div style="font-size: 10px; font-weight: 600; color: #7F77DD; margin-bottom: 12px; text-transform: uppercase;">Weekly Screen Time</div>
+    <div class="mini-chart" style="height: 100px;">${bars}</div>
+    <div class="mini-chart-labels"><span>6d ago</span><span>Today</span></div>
+  `;
+}
+
+function renderPomodoroDistribution(history = {}) {
+  const now = new Date();
+  let rowsHtml = "";
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().slice(0, 10);
+    const data = history[dateStr] || { focus: 0, short: 0, long: 0 };
+    const total = data.focus + data.short + data.long;
+    
+    // Scale widths
+    const fW = total > 0 ? (data.focus / 10) * 100 : 0; // Assume 10 max for scale or use total
+    const sW = total > 0 ? (data.short / 10) * 100 : 0;
+    const lW = total > 0 ? (data.long / 10) * 100 : 0;
+
+    const label = i === 0 ? "Today" : d.toLocaleDateString(undefined, { weekday: 'short' });
+
+    rowsHtml += `
+      <div class="pomo-chart-row">
+        <div class="pomo-label">${label}</div>
+        <div class="pomo-stack">
+          <div class="stack-segment stack-focus" style="flex: ${data.focus}"></div>
+          <div class="stack-segment stack-short" style="flex: ${data.short}"></div>
+          <div class="stack-segment stack-long" style="flex: ${data.long}"></div>
+        </div>
+        <div style="font-size: 9px; width: 15px; text-align: right; color: #666">${total}</div>
+      </div>
+    `;
+  }
+
+  return `
+    <div style="font-size: 10px; font-weight: 600; color: #7F77DD; margin-bottom: 12px; text-transform: uppercase;">Pomo Distribution</div>
+    ${rowsHtml}
+    <div class="pomo-legend">
+      <div class="legend-item"><div class="dot stack-focus"></div>Focus</div>
+      <div class="legend-item"><div class="dot stack-short"></div>Short</div>
+      <div class="legend-item"><div class="dot stack-long"></div>Long</div>
+    </div>
+  `;
+}
+
+function toggleStatPanel(panelId, contentHtml) {
+  const panel = document.getElementById(panelId);
+  const isExpanded = panel.classList.contains("expanded");
+  
+  // Collapse all
+  document.querySelectorAll(".stat-detail-panel").forEach(p => p.classList.remove("expanded"));
+  
+  if (!isExpanded) {
+    panel.innerHTML = contentHtml;
+    panel.classList.add("expanded");
+  }
+}
+
+function renderMiniChart(host, history = {}, todaySeconds) {
+  const days = [];
+  const now = new Date();
+  let max = todaySeconds;
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().slice(0, 10);
+    const secs = i === 0 ? todaySeconds : (history[dateStr] || 0);
+    if (secs > max) max = secs;
+    days.push(secs);
+  }
+
+  const bars = days.map(s => {
+    const h = max > 0 ? (s / max) * 100 : 0;
+    return `
+      <div class="mini-bar" title="${formatTime(s)}">
+        <div class="mini-bar-fill" style="height:${h}%"></div>
+      </div>`;
+  }).join("");
+
+  return `<div class="mini-chart">${bars}</div>`;
+}
+
+function toggleSiteDetail(host) {
+  const detailId = `detail-${host.replace(/\./g, '-')}`;
+  const detail = document.getElementById(detailId);
+  const isExpanded = detail.classList.contains("expanded");
+  
+  document.querySelectorAll(".site-details").forEach(d => {
+    if (d.id !== detailId) d.classList.remove("expanded");
+  });
+  
+  detail.classList.toggle("expanded");
+}
+
+function toggleOtherExpansion() {
+  const exp = document.getElementById("other-expansion-list");
+  exp.classList.toggle("expanded");
 }
 
 // ─── Timer tab ──────────────────────────────────────────────────────────────

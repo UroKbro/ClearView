@@ -34,6 +34,8 @@ const DEFAULTS = {
         "reddit.com",
         "tiktok.com"
     ],
+    siteWeeklyTotals: {},
+    pomodoroHistory: {},
     lastResetDate: null,
 };
 
@@ -257,27 +259,58 @@ async function storageInit() {
 
 async function maybeDailyReset() {
     const today = new Date().toISOString().slice(0, 10);
-    const { lastResetDate, siteTimes, weeklyTotals } = await storageGet([
+    const { lastResetDate, siteTimes, weeklyTotals, siteWeeklyTotals, pomodoroHistory } = await storageGet([
         "lastResetDate",
         "siteTimes",
         "weeklyTotals",
+        "siteWeeklyTotals",
+        "pomodoroHistory"
     ]);
 
     if (lastResetDate === today) return;
 
+    // 1. Archive Total Time
     const totalSeconds = Object.values(siteTimes || {}).reduce((a, b) => a + b, 0);
     const updatedWeekly = { ...(weeklyTotals || {}) };
     if (lastResetDate) updatedWeekly[lastResetDate] = totalSeconds;
 
+    // 2. Archive Per-Site Time
+    const updatedSiteWeekly = { ...(siteWeeklyTotals || {}) };
+    if (lastResetDate && siteTimes) {
+        Object.entries(siteTimes).forEach(([host, secs]) => {
+            if (!updatedSiteWeekly[host]) updatedSiteWeekly[host] = {};
+            updatedSiteWeekly[host][lastResetDate] = secs;
+        });
+    }
+
+    // 3. Prune old data (> 7 days)
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - 7);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+
     for (const date of Object.keys(updatedWeekly)) {
-        if (new Date(date) < cutoff) delete updatedWeekly[date];
+        if (date < cutoffStr) delete updatedWeekly[date];
+    }
+
+    const updatedPomodoro = { ...(pomodoroHistory || {}) };
+    for (const date of Object.keys(updatedPomodoro)) {
+        if (date < cutoffStr) delete updatedPomodoro[date];
+    }
+
+    for (const host of Object.keys(updatedSiteWeekly)) {
+        for (const date of Object.keys(updatedSiteWeekly[host])) {
+            if (date < cutoffStr) delete updatedSiteWeekly[host][date];
+        }
+        if (Object.keys(updatedSiteWeekly[host]).length === 0) {
+            delete updatedSiteWeekly[host];
+        }
     }
 
     await storageSet({
         siteTimes: {},
         weeklyTotals: updatedWeekly,
+        siteWeeklyTotals: updatedSiteWeekly,
+        pomodoroHistory: updatedPomodoro,
         lastResetDate: today,
     });
 
@@ -316,12 +349,16 @@ async function notify(title, message) {
 }
 
 async function handleTimerComplete() {
-    const { timerState } = await storageGet(["timerState"]);
+    const { timerState, pomodoroHistory } = await storageGet(["timerState", "pomodoroHistory"]);
     const nextState = { ...timerState };
+    const today = new Date().toISOString().slice(0, 10);
+    const updatedHistory = { ...(pomodoroHistory || {}) };
+    if (!updatedHistory[today]) updatedHistory[today] = { focus: 0, short: 0, long: 0 };
     
     if (timerState.mode === "focus") {
         nextState.sessionsToday = (timerState.sessionsToday || 0) + 1;
-        // Logic for long break every 4 sessions
+        updatedHistory[today].focus++;
+
         if (nextState.sessionsToday % 4 === 0) {
             nextState.mode = "long";
             nextState.duration = timerState.settings.longMins * 60;
@@ -332,6 +369,9 @@ async function handleTimerComplete() {
             notify("Focus Complete", "Great job! Time for a short break.");
         }
     } else {
+        if (timerState.mode === "short") updatedHistory[today].short++;
+        else if (timerState.mode === "long") updatedHistory[today].long++;
+
         nextState.mode = "focus";
         nextState.duration = timerState.settings.focusMins * 60;
         notify("Break Over", "Ready to get back to work?");
@@ -339,10 +379,12 @@ async function handleTimerComplete() {
 
     nextState.running = false;
     nextState.endTime = null;
-    await storageSet({ timerState: nextState });
+    await storageSet({ 
+        timerState: nextState,
+        pomodoroHistory: updatedHistory 
+    });
     chrome.alarms.clear("pomodoroTimer");
 
-    // Disable blocking regardless of focus/break
     await updateBlockingRules(false);
 }
 
