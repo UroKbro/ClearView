@@ -25,6 +25,15 @@ const DEFAULTS = {
         lastNotification: 0,
         sessionStartTime: Date.now(),
     },
+    blockedSites: [
+        "facebook.com",
+        "twitter.com",
+        "x.com",
+        "instagram.com",
+        "youtube.com",
+        "reddit.com",
+        "tiktok.com"
+    ],
     lastResetDate: null,
 };
 
@@ -182,6 +191,45 @@ async function checkBurnoutConditions() {
     }
 }
 
+// --- Blocking Logic ---
+
+async function updateBlockingRules(enable) {
+    if (!chrome.declarativeNetRequest) return;
+
+    // Clear existing rules regardless
+    const oldRules = await chrome.declarativeNetRequest.getDynamicRules();
+    const oldRuleIds = oldRules.map(r => r.id);
+    
+    const removeRuleIds = oldRuleIds;
+    const addRules = [];
+
+    if (enable) {
+        const { blockedSites } = await storageGet(["blockedSites"]);
+        const sites = blockedSites || DEFAULTS.blockedSites;
+        const redirectUrl = chrome.runtime.getURL("blocked/blocked.html");
+
+        sites.forEach((domain, index) => {
+            addRules.push({
+                id: index + 1,
+                priority: 1,
+                action: {
+                    type: "redirect",
+                    redirect: { url: redirectUrl }
+                },
+                condition: {
+                    urlFilter: `*://${domain}/*`,
+                    resourceTypes: ["main_frame"]
+                }
+            });
+        });
+    }
+
+    await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds,
+        addRules
+    });
+}
+
 async function storageInit() {
     const existing = await storageGet(Object.keys(DEFAULTS));
     const toWrite = {};
@@ -281,6 +329,9 @@ async function handleTimerComplete() {
     nextState.endTime = null;
     await storageSet({ timerState: nextState });
     chrome.alarms.clear("pomodoroTimer");
+
+    // Disable blocking regardless of focus/break
+    await updateBlockingRules(false);
 }
 
 async function startTimer() {
@@ -293,6 +344,10 @@ async function startTimer() {
     chrome.alarms.create("pomodoroTimer", {
         when: endTime
     });
+
+    if (timerState.mode === "focus") {
+        await updateBlockingRules(true);
+    }
 }
 
 async function pauseTimer() {
@@ -302,6 +357,8 @@ async function pauseTimer() {
     const remaining = Math.max(0, Math.round((timerState.endTime - Date.now()) / 1000));
     await storageUpdate("timerState", { running: false, endTime: null, duration: remaining });
     chrome.alarms.clear("pomodoroTimer");
+
+    await updateBlockingRules(false);
 }
 
 async function resetTimer() {
@@ -313,6 +370,8 @@ async function resetTimer() {
 
     await storageUpdate("timerState", { running: false, endTime: null, duration });
     chrome.alarms.clear("pomodoroTimer");
+
+    await updateBlockingRules(false);
 }
 
 async function skipTimer() {
@@ -326,6 +385,7 @@ chrome.runtime.onInstalled.addListener(async () => {
     await maybeDailyReset();
     scheduleDailyReset();
     updateActiveTab();
+    await updateBlockingRules(false); // Clean slate
 });
 
 chrome.runtime.onStartup.addListener(async () => {
