@@ -217,8 +217,8 @@ async function updateBlockingRules(enable) {
                     redirect: { url: redirectUrl }
                 },
                 condition: {
-                    urlFilter: `*://${domain}/*`,
-                    resourceTypes: ["main_frame"]
+                    urlFilter: `||${domain}^`,
+                    resourceTypes: ["main_frame", "sub_frame"]
                 }
             });
         });
@@ -228,6 +228,17 @@ async function updateBlockingRules(enable) {
         removeRuleIds,
         addRules
     });
+    
+    console.log(`[ClearView] Site blocking ${enable ? "ENABLED" : "DISABLED"}. Rules active:`, addRules.length);
+}
+
+async function syncBlockingState() {
+    const { timerState } = await storageGet(["timerState"]);
+    if (timerState && timerState.running && timerState.mode === "focus") {
+        await updateBlockingRules(true);
+    } else {
+        await updateBlockingRules(false);
+    }
 }
 
 async function storageInit() {
@@ -392,6 +403,7 @@ chrome.runtime.onStartup.addListener(async () => {
     await maybeDailyReset();
     scheduleDailyReset();
     updateActiveTab();
+    await syncBlockingState();
 });
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
