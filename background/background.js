@@ -19,6 +19,11 @@ const DEFAULTS = {
     settings: {
         soundEnabled: true,
         notificationsEnabled: true,
+        burnoutAlertsEnabled: true,
+    },
+    burnoutState: {
+        lastNotification: 0,
+        sessionStartTime: Date.now(),
     },
     lastResetDate: null,
 };
@@ -108,6 +113,10 @@ async function updateActiveTab() {
 
         if (newDomain) {
             if (!oldState || oldState.domain !== newDomain) {
+                // New domain started - if we were previously 'idle' or this is first tab of the day,
+                // we might want to check session start, but let's keep it simple: 
+                // trackingState tracks the CURRENT domain. 
+                // sessionStartTime in burnoutState tracks the time since the user became active.
                 await chrome.storage.local.set({
                     trackingState: { domain: newDomain, startTime: Date.now() }
                 });
@@ -117,6 +126,59 @@ async function updateActiveTab() {
         }
     } catch (e) {
         console.error("UpdateActiveTab error:", e);
+    }
+}
+
+// --- Burnout Logic ---
+
+async function checkBurnoutConditions() {
+    const { settings, burnoutState, siteTimes, weeklyTotals } = await storageGet([
+        "settings",
+        "burnoutState",
+        "siteTimes",
+        "weeklyTotals"
+    ]);
+
+    if (!settings?.burnoutAlertsEnabled) return;
+
+    const now = Date.now();
+    const fourHours = 4 * 60 * 60 * 1000;
+
+    // Check throttle
+    if (now - (burnoutState?.lastNotification || 0) < fourHours) return;
+
+    let alertTitle = null;
+    let alertMsg = null;
+
+    // 1. Continuous Work Threshold (2 hours)
+    const sessionDurationMins = (now - (burnoutState?.sessionStartTime || now)) / 1000 / 60;
+    if (sessionDurationMins > 120) {
+        alertTitle = "Focus Fatigue Detected";
+        alertMsg = "You've been active for 2 hours straight. A 5-minute breather would actually boost your performance.";
+    }
+
+    // 2. Late Night Threshold (11:30 PM - 5:00 AM)
+    const hours = new Date().getHours();
+    const minutes = new Date().getMinutes();
+    if (!alertTitle && (hours >= 23 && minutes >= 30 || hours < 5)) {
+        alertTitle = "Diminishing Returns";
+        alertMsg = "It's getting late. Performance drops sharply after midnight—maybe it's time for your shut-down ritual?";
+    }
+
+    // 3. High Intensity Threshold (Today > 1.2 * 7-day Average)
+    const totalToday = Object.values(siteTimes || {}).reduce((a, b) => a + b, 0);
+    const weeklyValues = Object.values(weeklyTotals || {});
+    if (!alertTitle && weeklyValues.length >= 3 && totalToday > 7200) { // Only if they've worked > 2h today
+        const avg = weeklyValues.reduce((a, b) => a + b, 0) / weeklyValues.length;
+        if (totalToday > avg * 1.2) {
+            alertTitle = "High Intensity Day";
+            alertMsg = "You're 20% above your daily average usage. Watch out for burnout; your future self will thank you for resting.";
+        }
+    }
+
+    if (alertTitle) {
+        notify(alertTitle, alertMsg);
+        await storageUpdate("burnoutState", { lastNotification: now });
     }
 }
 
@@ -277,6 +339,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
         await maybeDailyReset();
     } else if (alarm.name === "heartbeat") {
         await updateActiveTab();
+        await checkBurnoutConditions();
     } else if (alarm.name === "pomodoroTimer") {
         await handleTimerComplete();
     }
@@ -311,10 +374,14 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (changeInfo.url) updateActiveTab();
 });
 chrome.windows.onFocusChanged.addListener(updateActiveTab);
-chrome.idle.onStateChanged.addListener((state) => {
+chrome.idle.onStateChanged.addListener(async (state) => {
     if (state === "active") {
+        const now = Date.now();
+        await storageUpdate("burnoutState", { sessionStartTime: now });
         updateActiveTab();
     } else {
         logTime();
+        // Clear session start when idle/locked
+        await storageUpdate("burnoutState", { sessionStartTime: Date.now() });
     }
 });
