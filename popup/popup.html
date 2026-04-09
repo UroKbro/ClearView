@@ -66,11 +66,28 @@
   </div>
 
   <div id="tasks" class="panel">
-    <p style="padding:16px;color:#888;font-size:13px;">Tasks coming in phase 4.</p>
+    <div id="tasks-input-wrap">
+      <input type="text" id="task-input" placeholder="Add a focus task..." autocomplete="off">
+      <button id="add-task-btn">+</button>
+    </div>
+    <div id="tasks-list"></div>
   </div>
 
   <div id="insights" class="panel">
-    <p style="padding:16px;color:#888;font-size:13px;">Insights coming in phase 5.</p>
+    <div id="insights-grid">
+      <div class="insight-stat">
+        <div class="stat-val" id="avg-daily">0m</div>
+        <div class="stat-label">Daily Avg</div>
+      </div>
+      <div class="insight-stat">
+        <div class="stat-val" id="weekly-total">0m</div>
+        <div class="stat-label">Weekly Total</div>
+      </div>
+    </div>
+    <div class="section-label" style="margin-top: 10px;">7-Day Activity</div>
+    <div id="chart-container">
+      <div id="bar-chart"></div>
+    </div>
   </div>
 
   <script src="popup.js"></script>

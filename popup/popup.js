@@ -5,7 +5,13 @@ document.querySelectorAll(".tab").forEach(btn => {
     document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
     document.querySelectorAll(".panel").forEach(p => p.classList.remove("active"));
     btn.classList.add("active");
-    document.getElementById(btn.dataset.tab).classList.add("active");
+    const panel = document.getElementById(btn.dataset.tab);
+    panel.classList.add("active");
+
+    // Trigger specific tab loads
+    if (btn.dataset.tab === "tasks") loadTasks();
+    if (btn.dataset.tab === "insights") loadInsights();
+    if (btn.dataset.tab === "today") loadToday();
   });
 });
 
@@ -193,6 +199,125 @@ document.querySelectorAll(".preset-btn").forEach(btn => {
     });
   });
 });
+
+// ─── Tasks tab ───────────────────────────────────────────────────────────────
+
+async function loadTasks() {
+  const { tasks } = await chrome.storage.local.get("tasks");
+  const list = document.getElementById("tasks-list");
+  list.innerHTML = "";
+
+  if (!tasks || tasks.length === 0) {
+    list.innerHTML = `<p style="padding:16px;color:#aaa;font-size:13px;text-align:center;">No tasks yet. Add one above!</p>`;
+    return;
+  }
+
+  tasks.forEach(task => {
+    const item = document.createElement("div");
+    item.className = `task-item ${task.completed ? "completed" : ""}`;
+    item.innerHTML = `
+      <div class="task-checkbox ${task.completed ? "checked" : ""}" data-id="${task.id}"></div>
+      <div class="task-text">${task.text}</div>
+      <div class="delete-task" data-id="${task.id}">✕</div>
+    `;
+
+    item.querySelector(".task-checkbox").onclick = () => toggleTask(task.id);
+    item.querySelector(".delete-task").onclick = () => deleteTask(task.id);
+    list.appendChild(item);
+  });
+}
+
+async function addTask() {
+  const input = document.getElementById("task-input");
+  const text = input.value.trim();
+  if (!text) return;
+
+  const { tasks = [] } = await chrome.storage.local.get("tasks");
+  const newTask = {
+    id: Date.now().toString(),
+    text,
+    completed: false
+  };
+
+  await chrome.storage.local.set({ tasks: [newTask, ...tasks] });
+  input.value = "";
+  loadTasks();
+}
+
+async function toggleTask(id) {
+  const { tasks = [] } = await chrome.storage.local.get("tasks");
+  const updated = tasks.map(t => t.id === id ? { ...t, completed: !t.completed } : t);
+  await chrome.storage.local.set({ tasks: updated });
+  loadTasks();
+}
+
+async function deleteTask(id) {
+  const { tasks = [] } = await chrome.storage.local.get("tasks");
+  const updated = tasks.filter(t => t.id !== id);
+  await chrome.storage.local.set({ tasks: updated });
+  loadTasks();
+}
+
+document.getElementById("add-task-btn").onclick = addTask;
+document.getElementById("task-input").onkeypress = (e) => {
+  if (e.key === "Enter") addTask();
+};
+
+// ─── Insights tab ────────────────────────────────────────────────────────────
+
+async function loadInsights() {
+  const { weeklyTotals = {} } = await chrome.storage.local.get("weeklyTotals");
+
+  // Get last 7 days including today
+  const days = [];
+  const labels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  let maxTime = 3600; // Min 1h for scale
+  let totalWeek = 0;
+
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().slice(0, 10);
+    const seconds = weeklyTotals[dateStr] || 0;
+    
+    // Add today's live data if we're looking at today's bar
+    let displaySeconds = seconds;
+    if (i === 0) {
+      const { siteTimes = {} } = await chrome.storage.local.get("siteTimes");
+      displaySeconds = Object.values(siteTimes).reduce((a, b) => a + b, 0);
+    }
+
+    if (displaySeconds > maxTime) maxTime = displaySeconds;
+    totalWeek += displaySeconds;
+
+    days.push({
+      label: labels[d.getDay()],
+      seconds: displaySeconds
+    });
+  }
+
+  // Update Stats
+  document.getElementById("weekly-total").textContent = formatTime(totalWeek);
+  document.getElementById("avg-daily").textContent = formatTime(totalWeek / 7);
+
+  // Render Bar Chart
+  const chart = document.getElementById("bar-chart");
+  chart.innerHTML = "";
+
+  days.forEach(day => {
+    const heightPercent = (day.seconds / maxTime) * 100;
+    const barWrap = document.createElement("div");
+    barWrap.className = "bar-wrap";
+    barWrap.title = formatTime(day.seconds);
+    barWrap.innerHTML = `
+      <div class="bar">
+        <div class="bar-fill" style="height: ${heightPercent}%"></div>
+      </div>
+      <div class="bar-label">${day.label}</div>
+    `;
+    chart.appendChild(barWrap);
+  });
+}
 
 // ─── Initialization ──────────────────────────────────────────────────────────
 
