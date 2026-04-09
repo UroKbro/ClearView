@@ -99,6 +99,7 @@ async function logTime(isCheckpoint = false) {
 
 async function updateActiveTab() {
     try {
+        await maybeDailyReset(); // Ensure we are tracking for the correct day
         const data = await chrome.storage.local.get("trackingState");
         const oldState = data.trackingState;
 
@@ -410,6 +411,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name === "dailyReset") {
         await maybeDailyReset();
     } else if (alarm.name === "heartbeat") {
+        await maybeDailyReset();
         await updateActiveTab();
         await checkBurnoutConditions();
     } else if (alarm.name === "pomodoroTimer") {
