@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ClearView</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div id="header">
+    <span id="logo">ClearView</span>
+  </div>
+
+  <div id="tab-bar">
+    <button class="tab active" data-tab="today">Today</button>
+    <button class="tab" data-tab="timer">Timer</button>
+    <button class="tab" data-tab="tasks">Tasks</button>
+    <button class="tab" data-tab="insights">Insights</button>
+  </div>
+
+  <div id="today" class="panel active">
+    <div id="summary">
+      <div class="stat">
+        <div class="stat-val" id="total-time">0m</div>
+        <div class="stat-label">Screen time</div>
+      </div>
+      <div class="stat">
+        <div class="stat-val" id="pomodoros-done">0</div>
+        <div class="stat-label">Pomodoros</div>
+      </div>
+    </div>
+    <div class="section-label">Top sites today</div>
+    <div id="site-list"></div>
+  </div>
+
+  <div id="timer" class="panel">
+    <div id="timer-container">
+      <div id="progress-wrap">
+        <svg id="timer-svg" viewBox="0 0 100 100">
+          <circle class="timer-bg" cx="50" cy="50" r="45"></circle>
+          <circle class="timer-fill" cx="50" cy="50" r="45" id="progress-ring"></circle>
+        </svg>
+        <div id="time-display">25:00</div>
+        <div id="mode-label">Focus</div>
+      </div>
+      
+      <div id="timer-controls">
+        <button id="reset-btn" class="control-btn" title="Reset">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+        </button>
+        <button id="play-pause-btn" class="main-btn" title="Start/Pause">
+          <svg id="play-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+          <svg id="pause-icon" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none" style="display:none;"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+        </button>
+        <button id="skip-btn" class="control-btn" title="Skip">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
+        </button>
+      </div>
+
+      <div id="timer-presets">
+        <button class="preset-btn" data-mins="15">15m</button>
+        <button class="preset-btn active" data-mins="25">25m</button>
+        <button class="preset-btn" data-mins="45">45m</button>
+        <button class="preset-btn" data-mins="60">60m</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tasks" class="panel">
+    <p style="padding:16px;color:#888;font-size:13px;">Tasks coming in phase 4.</p>
+  </div>
+
+  <div id="insights" class="panel">
+    <p style="padding:16px;color:#888;font-size:13px;">Insights coming in phase 5.</p>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

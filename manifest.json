@@ -1,0 +1,24 @@
+{
+    "manifest_version": 3,
+    "name": "ClearView",
+    "version": "1.0.0",
+    "description": "Track time, run pomodoros, stay focused.",
+    "permissions": [
+        "tabs",
+        "storage",
+        "alarms",
+        "notifications",
+        "idle"
+    ],
+    "host_permissions": [
+        "https://*/*",
+        "http://*/*"
+    ],
+    "background": {
+        "service_worker": "background/background.js"
+    },
+    "action": {
+        "default_popup": "popup/popup.html",
+        "default_title": "ClearView"
+    }
+}
