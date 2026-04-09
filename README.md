@@ -10,6 +10,8 @@ ClearView is a lightweight Chrome extension designed to help you reclaim your pr
 - **Pomodoro Timer**: Integrated focus sessions with customizable work and break intervals.
 - **Daily & Weekly Analytics**: View your productivity trends with local data storage.
 - **Privacy First**: All browsing data is stored locally on your machine. We never see your history, and we never sell your data.
+- **Tasks**: A minimal, persistent to-do list to manage your daily focus goals without leaving the extension.
+- **Insights**: A 7-day visualization of your browsing habits to help you track and optimize your usage trends.
 
 ## 🛠️ Installation (Development Mode)
 
