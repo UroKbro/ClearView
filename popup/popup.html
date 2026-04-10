@@ -11,33 +11,28 @@
   </div>
 
   <div id="tab-bar">
-    <button class="tab active" data-tab="today">Today</button>
+    <button class="tab active" data-tab="stats">Stats</button>
     <button class="tab" data-tab="timer">Timer</button>
     <button class="tab" data-tab="tasks">Tasks</button>
-    <button class="tab" data-tab="insights">Insights</button>
   </div>
 
-  <div id="today" class="panel active">
+  <div id="stats" class="panel active">
     <div id="summary">
       <div class="stat">
-        <div class="stat-card stat-card-clickable" id="stat-total-time">
-          <label>Today's Total</label>
-          <div class="value" id="total-time">0m</div>
-        </div>
-        <div class="stat-detail-panel" id="panel-total-time">
-          <!-- Weekly Total Chart goes here -->
-        </div>
+        <div class="stat-val" id="total-time">0m</div>
+        <div class="stat-label">Screen time</div>
       </div>
       <div class="stat">
-        <div class="stat-card stat-card-clickable" id="stat-pomodoros">
-          <label>Pomodoros Done</label>
-          <div class="value" id="pomodoros-done">0</div>
-        </div>
-        <div class="stat-detail-panel" id="panel-pomodoros">
-          <!-- Pomodoro Distribution Chart goes here -->
-        </div>
+        <div class="stat-val" id="pomodoros-done">0</div>
+        <div class="stat-label">Pomodoros</div>
       </div>
     </div>
+    
+    <div class="section-label">7-Day Activity</div>
+    <div id="chart-container">
+      <div id="bar-chart"></div>
+    </div>
+
     <div class="section-label">Top sites today</div>
     <div id="site-list"></div>
   </div>
@@ -83,22 +78,6 @@
     <div id="tasks-list"></div>
   </div>
 
-  <div id="insights" class="panel">
-    <div id="insights-grid">
-      <div class="insight-stat">
-        <div class="stat-val" id="avg-daily">0m</div>
-        <div class="stat-label">Daily Avg</div>
-      </div>
-      <div class="insight-stat">
-        <div class="stat-val" id="weekly-total">0m</div>
-        <div class="stat-label">Weekly Total</div>
-      </div>
-    </div>
-    <div class="section-label" style="margin-top: 10px;">7-Day Activity</div>
-    <div id="chart-container">
-      <div id="bar-chart"></div>
-    </div>
-  </div>
 
   <script src="popup.js"></script>
 </body>

@@ -466,6 +466,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     else if (request.action === "PAUSE_TIMER") pauseTimer().then(sendResponse);
     else if (request.action === "RESET_TIMER") resetTimer().then(sendResponse);
     else if (request.action === "SKIP_TIMER") skipTimer().then(sendResponse);
+    else if (request.action === "REFRESH_BLOCKING") syncBlockingState().then(sendResponse);
     else if (request.action === "UPDATE_TIMER_SETTINGS") {
         const { focusMins } = request;
         storageUpdate("timerState", { 
